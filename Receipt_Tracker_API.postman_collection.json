@@ -1,0 +1,566 @@
+{
+  "info": {
+    "name": "Receipt Tracker API",
+    "description": "Complete API collection for Receipt Tracker with dummy data examples",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health Check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/health",
+          "host": ["{{baseUrl}}"],
+          "path": ["health"]
+        }
+      }
+    },
+    {
+      "name": "Stores",
+      "item": [
+        {
+          "name": "Get All Stores",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stores",
+              "host": ["{{baseUrl}}"],
+              "path": ["stores"]
+            }
+          }
+        },
+        {
+          "name": "Get Store by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stores/store-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["stores", "store-001"]
+            }
+          }
+        },
+        {
+          "name": "Create Store",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"store-004\",\n  \"name\": \"New Gold Store\",\n  \"code\": \"NGS\",\n  \"is_active\": true,\n  \"progress_bar_config\": {\n    \"blue\": 10,\n    \"yellow\": 5,\n    \"orange\": 3,\n    \"red\": 2\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stores",
+              "host": ["{{baseUrl}}"],
+              "path": ["stores"]
+            }
+          }
+        },
+        {
+          "name": "Update Store",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Store Name\",\n  \"is_active\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/stores/store-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["stores", "store-001"]
+            }
+          }
+        },
+        {
+          "name": "Delete Store",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/stores/store-004",
+              "host": ["{{baseUrl}}"],
+              "path": ["stores", "store-004"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Suppliers",
+      "item": [
+        {
+          "name": "Get All Suppliers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/suppliers",
+              "host": ["{{baseUrl}}"],
+              "path": ["suppliers"]
+            }
+          }
+        },
+        {
+          "name": "Get Supplier by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/suppliers/supplier-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["suppliers", "supplier-001"]
+            }
+          }
+        },
+        {
+          "name": "Create Supplier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"supplier-005\",\n  \"name\": \"New Gold Supplier\",\n  \"code\": \"NGS\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/suppliers",
+              "host": ["{{baseUrl}}"],
+              "path": ["suppliers"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Purchases",
+      "item": [
+        {
+          "name": "Get All Purchases",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchases",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchases"]
+            }
+          }
+        },
+        {
+          "name": "Get Purchase by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchases/purchase-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchases", "purchase-001"]
+            }
+          }
+        },
+        {
+          "name": "Get Purchases by Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchases?status=Paid",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchases"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "Paid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Purchase",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"purchase-005\",\n  \"store_id\": \"store-001\",\n  \"date\": \"2025-02-01\",\n  \"status\": \"Pending\",\n  \"total_grams_21k_equivalent\": 100.0,\n  \"total_base_fees\": 500.0,\n  \"total_discount_amount\": 50.0,\n  \"total_net_fees\": 450.0,\n  \"due_date\": \"2025-03-01\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/purchases",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchases"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Purchase Receipts",
+      "item": [
+        {
+          "name": "Get All Purchase Receipts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchase-receipts",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchase-receipts"]
+            }
+          }
+        },
+        {
+          "name": "Get Receipt by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchase-receipts/receipt-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchase-receipts", "receipt-001"]
+            }
+          }
+        },
+        {
+          "name": "Get Receipt by Receipt Number",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchase-receipts/receipt/RCP-001-2025",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchase-receipts", "receipt", "RCP-001-2025"]
+            }
+          }
+        },
+        {
+          "name": "Get Receipts by Purchase",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchase-receipts/purchase/purchase-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchase-receipts", "purchase", "purchase-001"]
+            }
+          }
+        },
+        {
+          "name": "Get Receipts by Supplier",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchase-receipts/supplier/supplier-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchase-receipts", "supplier", "supplier-001"]
+            }
+          }
+        },
+        {
+          "name": "Search Receipts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchase-receipts?search=gold",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchase-receipts"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "gold"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Purchase Receipt",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"receipt-009\",\n  \"purchase_id\": \"purchase-001\",\n  \"supplier_id\": \"supplier-001\",\n  \"receipt_number\": \"RCP-009-2025\",\n  \"receipt_date\": \"2025-02-01\",\n  \"karat_type\": \"21\",\n  \"grams\": 75.0,\n  \"base_fee_per_gram\": 5.0,\n  \"discount_percentage\": 10.0,\n  \"net_fee_per_gram\": 4.5,\n  \"total_base_fee\": 375.0,\n  \"total_discount_amount\": 37.5,\n  \"total_net_fee\": 337.5,\n  \"notes\": \"New receipt for testing\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/purchase-receipts",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchase-receipts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Get All Payments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            }
+          }
+        },
+        {
+          "name": "Get Payment by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/payment-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "payment-001"]
+            }
+          }
+        },
+        {
+          "name": "Get Payments by Purchase (with Summary)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/purchase/purchase-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "purchase", "purchase-001"]
+            }
+          }
+        },
+        {
+          "name": "Get Payments by Method",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments/method/Cash",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments", "method", "Cash"]
+            }
+          }
+        },
+        {
+          "name": "Create Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"payment-006\",\n  \"purchase_id\": \"purchase-002\",\n  \"amount\": 200.0,\n  \"payment_date\": \"2025-02-01\",\n  \"payment_method\": \"Bank Transfer\",\n  \"reference_number\": \"BT-003\",\n  \"notes\": \"Additional payment for partial purchase\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/payments",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Discount Tiers",
+      "item": [
+        {
+          "name": "Get All Discount Tiers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/discount-tiers",
+              "host": ["{{baseUrl}}"],
+              "path": ["discount-tiers"]
+            }
+          }
+        },
+        {
+          "name": "Get Tiers by Supplier",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/discount-tiers?supplier=supplier-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["discount-tiers"],
+              "query": [
+                {
+                  "key": "supplier",
+                  "value": "supplier-001"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tiers by Karat Type",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/discount-tiers?karat_type=21",
+              "host": ["{{baseUrl}}"],
+              "path": ["discount-tiers"],
+              "query": [
+                {
+                  "key": "karat_type",
+                  "value": "21"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Discount Tier",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"tier-009\",\n  \"supplier_id\": \"supplier-001\",\n  \"karat_type\": \"21\",\n  \"name\": \"Super Premium 21k\",\n  \"threshold\": 1000.0,\n  \"discount_percentage\": 20.0,\n  \"is_protected\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/discount-tiers",
+              "host": ["{{baseUrl}}"],
+              "path": ["discount-tiers"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Advanced Queries",
+      "item": [
+        {
+          "name": "Search with Pagination",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchase-receipts?search=gold&page=1&limit=5&sortBy=receipt_date&sortOrder=DESC",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchase-receipts"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "gold"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "receipt_date"
+                },
+                {
+                  "key": "sortOrder",
+                  "value": "DESC"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Filter Purchases by Store and Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/purchases?store=store-001&status=Paid",
+              "host": ["{{baseUrl}}"],
+              "path": ["purchases"],
+              "query": [
+                {
+                  "key": "store",
+                  "value": "store-001"
+                },
+                {
+                  "key": "status",
+                  "value": "Paid"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Payments with Search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/payments?search=cash&method=Cash",
+              "host": ["{{baseUrl}}"],
+              "path": ["payments"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "cash"
+                },
+                {
+                  "key": "method",
+                  "value": "Cash"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+
+
