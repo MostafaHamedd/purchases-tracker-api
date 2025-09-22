@@ -24,18 +24,29 @@ const getAllPurchases = async (req, res) => {
       ORDER BY p.created_at DESC
     `);
 
-    res.json({
+    const response = {
       success: true,
       data: rows,
       count: rows.length,
-    });
+    };
+
+    console.log(
+      "📤 GET /api/purchases Response:",
+      JSON.stringify(response, null, 2)
+    );
+    res.json(response);
   } catch (error) {
     console.error("Error fetching purchases:", error);
-    res.status(500).json({
+    const errorResponse = {
       success: false,
       error: "Failed to fetch purchases",
       message: error.message,
-    });
+    };
+    console.log(
+      "📤 GET /api/purchases Error Response:",
+      JSON.stringify(errorResponse, null, 2)
+    );
+    res.status(500).json(errorResponse);
   }
 };
 
@@ -61,16 +72,26 @@ const getPurchaseById = async (req, res) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({
+      const notFoundResponse = {
         success: false,
         error: "Purchase not found",
-      });
+      };
+      console.log(
+        "📤 GET /api/purchases/:id Not Found Response:",
+        JSON.stringify(notFoundResponse, null, 2)
+      );
+      return res.status(404).json(notFoundResponse);
     }
 
-    res.json({
+    const response = {
       success: true,
       data: rows[0],
-    });
+    };
+    console.log(
+      "📤 GET /api/purchases/:id Response:",
+      JSON.stringify(response, null, 2)
+    );
+    res.json(response);
   } catch (error) {
     console.error("Error fetching purchase:", error);
     res.status(500).json({
@@ -103,11 +124,16 @@ const createPurchase = async (req, res) => {
 
     // Validation
     if (!id || !store_id || !date) {
-      return res.status(400).json({
+      const validationResponse = {
         success: false,
         error: "Missing required fields",
         required: ["id", "store_id", "date"],
-      });
+      };
+      console.log(
+        "📤 POST /api/purchases Validation Error Response:",
+        JSON.stringify(validationResponse, null, 2)
+      );
+      return res.status(400).json(validationResponse);
     }
 
     // Validate status
@@ -173,7 +199,7 @@ const createPurchase = async (req, res) => {
       ]
     );
 
-    res.status(201).json({
+    const response = {
       success: true,
       message: "Purchase created successfully",
       data: {
@@ -188,7 +214,12 @@ const createPurchase = async (req, res) => {
         due_date,
         store_name: storeCheck[0].name,
       },
-    });
+    };
+    console.log(
+      "📤 POST /api/purchases Response:",
+      JSON.stringify(response, null, 2)
+    );
+    res.status(201).json(response);
   } catch (error) {
     console.error("Error creating purchase:", error);
 

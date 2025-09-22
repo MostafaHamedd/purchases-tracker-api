@@ -1,4 +1,5 @@
 const { pool } = require("../config/database");
+const { logResponse, logRequest } = require("../utils/responseLogger");
 
 // ============================================================================
 // SUPPLIERS CONTROLLER
@@ -13,22 +14,29 @@ const { pool } = require("../config/database");
  */
 const getAllSuppliers = async (req, res) => {
   try {
+    logRequest("GET", "/api/suppliers", req.query);
+
     const [rows] = await pool.execute(
       "SELECT * FROM suppliers ORDER BY created_at DESC"
     );
 
-    res.json({
+    const response = {
       success: true,
       data: rows,
       count: rows.length,
-    });
+    };
+
+    logResponse("GET", "/api/suppliers", 200, response);
+    res.json(response);
   } catch (error) {
     console.error("Error fetching suppliers:", error);
-    res.status(500).json({
+    const errorResponse = {
       success: false,
       error: "Failed to fetch suppliers",
       message: error.message,
-    });
+    };
+    logResponse("GET", "/api/suppliers", 500, errorResponse, true);
+    res.status(500).json(errorResponse);
   }
 };
 
@@ -73,15 +81,19 @@ const getSupplierById = async (req, res) => {
  */
 const createSupplier = async (req, res) => {
   try {
+    logRequest("POST", "/api/suppliers", req.body);
+
     const { id, name, code, is_active = true } = req.body;
 
     // Validation
     if (!id || !name || !code) {
-      return res.status(400).json({
+      const validationResponse = {
         success: false,
         error: "Missing required fields",
         required: ["id", "name", "code"],
-      });
+      };
+      logResponse("POST", "/api/suppliers", 400, validationResponse, true);
+      return res.status(400).json(validationResponse);
     }
 
     // Validate code format (should be uppercase, 3-10 characters)
@@ -262,5 +274,3 @@ module.exports = {
   updateSupplier,
   deleteSupplier,
 };
-
-

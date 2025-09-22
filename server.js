@@ -4,6 +4,9 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 require("dotenv").config();
 
+const responseLogger = require("./middleware/responseLogger");
+const requestLogger = require("./middleware/requestLogger");
+
 const { initializeDatabase } = require("./config/database");
 const suppliersRoutes = require("./routes/suppliers");
 const discountTiersRoutes = require("./routes/discountTiers");
@@ -31,6 +34,12 @@ app.use(
 app.use(morgan("combined"));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Request logging middleware - logs all incoming requests
+app.use(requestLogger);
+
+// Response logging middleware - logs all API responses
+app.use(responseLogger);
 
 // Routes
 app.use("/api/suppliers", suppliersRoutes);

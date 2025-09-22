@@ -340,9 +340,9 @@ const createPayment = async (req, res) => {
       });
     }
 
-    // Validate amounts
-    if (grams_paid <= 0 || fees_paid <= 0) {
-      console.log("❌ Payment validation failed - invalid amounts:", {
+    // Validate amounts - at least one must be positive, neither can be negative
+    if (grams_paid < 0 || fees_paid < 0) {
+      console.log("❌ Payment validation failed - negative amounts:", {
         grams_paid,
         fees_paid,
         receivedData: req.body,
@@ -350,7 +350,22 @@ const createPayment = async (req, res) => {
       return res.status(400).json({
         success: false,
         error: "Invalid amounts",
-        message: "Grams paid and fees paid must be positive numbers.",
+        message: "Grams paid and fees paid cannot be negative.",
+        receivedData: { grams_paid, fees_paid },
+      });
+    }
+
+    if (grams_paid === 0 && fees_paid === 0) {
+      console.log("❌ Payment validation failed - both amounts zero:", {
+        grams_paid,
+        fees_paid,
+        receivedData: req.body,
+      });
+      return res.status(400).json({
+        success: false,
+        error: "Invalid amounts",
+        message:
+          "At least one of grams_paid or fees_paid must be greater than 0.",
         receivedData: { grams_paid, fees_paid },
       });
     }
