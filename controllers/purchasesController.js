@@ -137,14 +137,10 @@ const createPurchase = async (req, res) => {
     }
 
     // Validate numeric fields
-    if (
-      total_grams_21k_equivalent < 0 ||
-      total_base_fees < 0 ||
-      total_discount_amount < 0
-    ) {
+    if (total_grams_21k_equivalent < 0) {
       return res.status(400).json({
         success: false,
-        error: "Numeric fields cannot be negative",
+        error: "total_grams_21k_equivalent cannot be negative",
       });
     }
 
@@ -302,23 +298,11 @@ const updatePurchase = async (req, res) => {
     }
 
     if (total_base_fees !== undefined) {
-      if (total_base_fees < 0) {
-        return res.status(400).json({
-          success: false,
-          error: "total_base_fees cannot be negative",
-        });
-      }
       updateFields.push("total_base_fees = ?");
       updateValues.push(total_base_fees);
     }
 
     if (total_discount_amount !== undefined) {
-      if (total_discount_amount < 0) {
-        return res.status(400).json({
-          success: false,
-          error: "total_discount_amount cannot be negative",
-        });
-      }
       updateFields.push("total_discount_amount = ?");
       updateValues.push(total_discount_amount);
     }
