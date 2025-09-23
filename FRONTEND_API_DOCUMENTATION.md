@@ -205,6 +205,7 @@
 **Required Fields:**
 - `id` (string, max 50 chars) - Unique purchase ID
 - `store_id` (string) - Must exist in stores table
+- `supplier_id` (string) - Must exist in suppliers table
 - `date` (string) - Date in YYYY-MM-DD format
 
 **Optional Fields:**
@@ -220,6 +221,7 @@
 {
   "id": "purchase-003",
   "store_id": "1",
+  "supplier_id": "1",
   "date": "2025-09-22",
   "status": "Pending",
   "total_grams_21k_equivalent": 100.50,
@@ -230,16 +232,25 @@
 }
 ```
 
+**Note:** This endpoint automatically creates a corresponding record in the `purchase_suppliers` table.
+
 **Validation Rules:**
 - `date` and `due_date` must be in YYYY-MM-DD format
 - `total_grams_21k_equivalent` cannot be negative (fees can be negative)
 - `store_id` must exist in stores table
+- `supplier_id` must exist in suppliers table
 
 **Available Store IDs:**
 - `1` (Downtown Gold Store)
 - `2` (Mall Jewelry Shop)
 - `3` (Plaza Gold Center)
 - `1758406458499` (Osama)
+
+**Available Supplier IDs:**
+- `1` (Gold Supplier A)
+- `2` (Gold Supplier B)
+- `3` (Gold Supplier C)
+- `4` (Gold Supplier D)
 
 ### PUT /api/purchases/:id
 **Update purchase**

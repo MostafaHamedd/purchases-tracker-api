@@ -8,6 +8,7 @@ const responseLogger = require("./middleware/responseLogger");
 const requestLogger = require("./middleware/requestLogger");
 
 const { initializeDatabase } = require("./config/database");
+const storesRoutes = require("./routes/stores");
 const suppliersRoutes = require("./routes/suppliers");
 const discountTiersRoutes = require("./routes/discountTiers");
 const purchasesRoutes = require("./routes/purchases");
@@ -42,6 +43,7 @@ app.use(requestLogger);
 app.use(responseLogger);
 
 // Routes
+app.use("/api/stores", storesRoutes);
 app.use("/api/suppliers", suppliersRoutes);
 app.use("/api/discount-tiers", discountTiersRoutes);
 app.use("/api/purchases", purchasesRoutes);
@@ -88,6 +90,7 @@ const startServer = async () => {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`🚀 Server is running on port ${PORT}`);
       console.log(`🔍 Health check: http://localhost:${PORT}/api/health`);
+      console.log(`🏪 Stores API: http://localhost:${PORT}/api/stores`);
       console.log(`🏭 Suppliers API: http://localhost:${PORT}/api/suppliers`);
       console.log(
         `💰 Discount Tiers API: http://localhost:${PORT}/api/discount-tiers`

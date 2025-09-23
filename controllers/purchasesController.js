@@ -105,14 +105,16 @@ const getPurchaseById = async (req, res) => {
 /**
  * Create new purchase
  * POST /api/purchases
- * Required fields: id, store_id, date
+ * Required fields: id, store_id, supplier_id, date
  * Optional fields: status, total_grams_21k_equivalent, total_base_fees, total_discount_amount, total_net_fees, due_date
+ * Automatically creates a corresponding purchase_suppliers record
  */
 const createPurchase = async (req, res) => {
   try {
     const {
       id,
       store_id,
+      supplier_id,
       date,
       status = "Pending",
       total_grams_21k_equivalent = 0,
@@ -123,11 +125,11 @@ const createPurchase = async (req, res) => {
     } = req.body;
 
     // Validation
-    if (!id || !store_id || !date) {
+    if (!id || !store_id || !supplier_id || !date) {
       const validationResponse = {
         success: false,
         error: "Missing required fields",
-        required: ["id", "store_id", "date"],
+        required: ["id", "store_id", "supplier_id", "date"],
       };
       console.log(
         "📤 POST /api/purchases Validation Error Response:",
@@ -183,43 +185,92 @@ const createPurchase = async (req, res) => {
       });
     }
 
-    const [result] = await pool.execute(
-      `INSERT INTO purchases (id, store_id, date, status, total_grams_21k_equivalent, total_base_fees, total_discount_amount, total_net_fees, due_date) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        id,
-        store_id,
-        date,
-        status,
-        total_grams_21k_equivalent,
-        total_base_fees,
-        total_discount_amount,
-        total_net_fees,
-        due_date || null,
-      ]
+    // Check if supplier exists
+    const [supplierCheck] = await pool.execute(
+      "SELECT id, name FROM suppliers WHERE id = ?",
+      [supplier_id]
     );
 
-    const response = {
-      success: true,
-      message: "Purchase created successfully",
-      data: {
-        id,
-        store_id,
-        date,
-        status,
-        total_grams_21k_equivalent,
-        total_base_fees,
-        total_discount_amount,
-        total_net_fees,
-        due_date,
-        store_name: storeCheck[0].name,
-      },
-    };
-    console.log(
-      "📤 POST /api/purchases Response:",
-      JSON.stringify(response, null, 2)
-    );
-    res.status(201).json(response);
+    if (supplierCheck.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Supplier not found",
+      });
+    }
+
+    // Start transaction to ensure both purchase and purchase_supplier are created
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      // Create the purchase
+      await connection.execute(
+        `INSERT INTO purchases (id, store_id, date, status, total_grams_21k_equivalent, total_base_fees, total_discount_amount, total_net_fees, due_date) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          store_id,
+          date,
+          status,
+          total_grams_21k_equivalent,
+          total_base_fees,
+          total_discount_amount,
+          total_net_fees,
+          due_date || null,
+        ]
+      );
+
+      // Create the purchase_supplier record
+      const purchaseSupplierId = `ps-${id}-${supplier_id}`;
+      await connection.execute(
+        `INSERT INTO purchase_suppliers (id, purchase_id, supplier_id, total_grams_21k_equivalent, total_base_fees, total_discount_amount, total_net_fees, receipt_count) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          purchaseSupplierId,
+          id,
+          supplier_id,
+          total_grams_21k_equivalent,
+          total_base_fees,
+          total_discount_amount,
+          total_net_fees,
+          0, // receipt_count starts at 0
+        ]
+      );
+
+      // Commit the transaction
+      await connection.commit();
+
+      const response = {
+        success: true,
+        message: "Purchase and purchase supplier created successfully",
+        data: {
+          id,
+          store_id,
+          supplier_id,
+          date,
+          status,
+          total_grams_21k_equivalent,
+          total_base_fees,
+          total_discount_amount,
+          total_net_fees,
+          due_date,
+          store_name: storeCheck[0].name,
+          supplier_name: supplierCheck[0].name,
+          purchase_supplier_id: purchaseSupplierId,
+        },
+      };
+      console.log(
+        "📤 POST /api/purchases Response:",
+        JSON.stringify(response, null, 2)
+      );
+      res.status(201).json(response);
+    } catch (error) {
+      // Rollback the transaction on error
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   } catch (error) {
     console.error("Error creating purchase:", error);
 
