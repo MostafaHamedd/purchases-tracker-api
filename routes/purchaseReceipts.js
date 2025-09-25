@@ -26,6 +26,9 @@ router.get(
   purchaseReceiptsController.getPurchaseReceiptByReceiptNumber
 );
 
+// POST /api/purchase-receipts/bulk - Create multiple purchase receipts
+router.post("/bulk", purchaseReceiptsController.createBulkPurchaseReceipts);
+
 // POST /api/purchase-receipts - Create new purchase receipt
 router.post("/", purchaseReceiptsController.createPurchaseReceipt);
 

@@ -10,10 +10,13 @@ const { pool } = require("../config/database");
 /**
  * Get all purchase suppliers with purchase and supplier information
  * GET /api/purchase-suppliers
+ * Supports query parameters: purchase_id, supplier_id
  */
 const getAllPurchaseSuppliers = async (req, res) => {
   try {
-    const [rows] = await pool.execute(`
+    const { purchase_id, supplier_id } = req.query;
+
+    let query = `
       SELECT 
         ps.*,
         p.date as purchase_date,
@@ -26,8 +29,31 @@ const getAllPurchaseSuppliers = async (req, res) => {
       JOIN purchases p ON ps.purchase_id = p.id
       JOIN suppliers s ON ps.supplier_id = s.id
       JOIN stores st ON p.store_id = st.id
-      ORDER BY ps.created_at DESC
-    `);
+    `;
+
+    const conditions = [];
+    const params = [];
+
+    // Add purchase_id filter if provided
+    if (purchase_id) {
+      conditions.push("ps.purchase_id = ?");
+      params.push(purchase_id);
+    }
+
+    // Add supplier_id filter if provided
+    if (supplier_id) {
+      conditions.push("ps.supplier_id = ?");
+      params.push(supplier_id);
+    }
+
+    // Add WHERE clause if conditions exist
+    if (conditions.length > 0) {
+      query += " WHERE " + conditions.join(" AND ");
+    }
+
+    query += " ORDER BY ps.created_at DESC";
+
+    const [rows] = await pool.execute(query, params);
 
     res.json({
       success: true,
@@ -200,8 +226,8 @@ const getPurchaseSuppliersBySupplier = async (req, res) => {
 /**
  * Create new purchase supplier
  * POST /api/purchase-suppliers
- * Required fields: id, purchase_id, supplier_id, karat_type, grams, base_fee_per_gram, net_fee_per_gram, total_base_fee, total_net_fee
- * Optional fields: discount_percentage, total_discount_amount
+ * Required fields: id, purchase_id, supplier_id, total_grams_21k_equivalent, total_base_fees, total_net_fees
+ * Optional fields: total_grams_18k, total_grams_21k, total_discount_amount, receipt_count
  */
 const createPurchaseSupplier = async (req, res) => {
   try {
@@ -209,14 +235,13 @@ const createPurchaseSupplier = async (req, res) => {
       id,
       purchase_id,
       supplier_id,
-      karat_type,
-      grams,
-      base_fee_per_gram,
-      discount_percentage = 0,
-      net_fee_per_gram,
-      total_base_fee,
+      total_grams_18k = 0,
+      total_grams_21k = 0,
+      total_grams_21k_equivalent,
+      total_base_fees,
       total_discount_amount = 0,
-      total_net_fee,
+      total_net_fees,
+      receipt_count = 0,
     } = req.body;
 
     // Validation
@@ -224,12 +249,9 @@ const createPurchaseSupplier = async (req, res) => {
       !id ||
       !purchase_id ||
       !supplier_id ||
-      !karat_type ||
-      grams === undefined ||
-      base_fee_per_gram === undefined ||
-      net_fee_per_gram === undefined ||
-      total_base_fee === undefined ||
-      total_net_fee === undefined
+      total_grams_21k_equivalent === undefined ||
+      total_base_fees === undefined ||
+      total_net_fees === undefined
     ) {
       return res.status(400).json({
         success: false,
@@ -238,39 +260,24 @@ const createPurchaseSupplier = async (req, res) => {
           "id",
           "purchase_id",
           "supplier_id",
-          "karat_type",
-          "grams",
-          "base_fee_per_gram",
-          "net_fee_per_gram",
-          "total_base_fee",
-          "total_net_fee",
+          "total_grams_21k_equivalent",
+          "total_base_fees",
+          "total_net_fees",
         ],
-      });
-    }
-
-    // Validate karat_type
-    if (!["18", "21"].includes(karat_type)) {
-      return res.status(400).json({
-        success: false,
-        error: "karat_type must be either '18' or '21'",
       });
     }
 
     // Validate numeric fields
     if (
-      grams <= 0 ||
-      base_fee_per_gram < 0 ||
-      net_fee_per_gram < 0 ||
-      total_base_fee < 0 ||
-      total_net_fee < 0 ||
-      discount_percentage < 0 ||
-      discount_percentage > 100 ||
-      total_discount_amount < 0
+      total_grams_21k_equivalent < 0 ||
+      total_base_fees < 0 ||
+      total_net_fees < 0 ||
+      total_discount_amount < 0 ||
+      receipt_count < 0
     ) {
       return res.status(400).json({
         success: false,
-        error:
-          "Invalid numeric values. Grams must be > 0, fees must be >= 0, discount percentage must be 0-100",
+        error: "Invalid numeric values. All amounts must be >= 0",
       });
     }
 
@@ -301,20 +308,19 @@ const createPurchaseSupplier = async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      `INSERT INTO purchase_suppliers (id, purchase_id, supplier_id, karat_type, grams, base_fee_per_gram, discount_percentage, net_fee_per_gram, total_base_fee, total_discount_amount, total_net_fee) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO purchase_suppliers (id, purchase_id, supplier_id, total_grams_18k, total_grams_21k, total_grams_21k_equivalent, total_base_fees, total_discount_amount, total_net_fees, receipt_count) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         purchase_id,
         supplier_id,
-        karat_type,
-        grams,
-        base_fee_per_gram,
-        discount_percentage,
-        net_fee_per_gram,
-        total_base_fee,
+        total_grams_18k,
+        total_grams_21k,
+        total_grams_21k_equivalent,
+        total_base_fees,
         total_discount_amount,
-        total_net_fee,
+        total_net_fees,
+        receipt_count,
       ]
     );
 
@@ -325,14 +331,13 @@ const createPurchaseSupplier = async (req, res) => {
         id,
         purchase_id,
         supplier_id,
-        karat_type,
-        grams,
-        base_fee_per_gram,
-        discount_percentage,
-        net_fee_per_gram,
-        total_base_fee,
+        total_grams_18k,
+        total_grams_21k,
+        total_grams_21k_equivalent,
+        total_base_fees,
         total_discount_amount,
-        total_net_fee,
+        total_net_fees,
+        receipt_count,
       },
     });
   } catch (error) {
@@ -605,5 +610,3 @@ module.exports = {
   updatePurchaseSupplier,
   deletePurchaseSupplier,
 };
-
-

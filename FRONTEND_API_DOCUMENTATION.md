@@ -232,7 +232,33 @@
 }
 ```
 
-**Note:** This endpoint automatically creates a corresponding record in the `purchase_suppliers` table.
+**Success Response (HTTP 201 Created):**
+```json
+{
+  "success": true,
+  "message": "Purchase, purchase supplier, and purchase receipt created successfully",
+  "data": {
+    "id": "purchase-003",
+    "store_id": "1",
+    "supplier_id": "1",
+    "date": "2025-09-22",
+    "status": "Pending",
+    "total_grams_21k_equivalent": 100.50,
+    "total_base_fees": 5000.00,
+    "total_discount_amount": 250.00,
+    "total_net_fees": 4750.00,
+    "due_date": "2025-10-22",
+    "store_name": "Downtown Gold Store",
+    "supplier_name": "Eg21",
+    "purchase_supplier_id": "ps-purchase-003-1",
+    "purchase_receipt_id": "pr-purchase-003-1-1"
+  }
+}
+```
+
+**Note:** This endpoint automatically creates corresponding records in:
+- `purchase_suppliers` table
+- `purchase_receipts` table (receipt #1)
 
 **Validation Rules:**
 - `date` and `due_date` must be in YYYY-MM-DD format

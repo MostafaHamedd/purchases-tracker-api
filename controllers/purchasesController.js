@@ -1,4 +1,9 @@
 const { pool } = require("../config/database");
+const {
+  PURCHASE_CONSTANTS,
+  STATUS_VALUES,
+  KARAT_TYPES,
+} = require("../constants");
 
 // ============================================================================
 // PURCHASES CONTROLLER
@@ -107,7 +112,9 @@ const getPurchaseById = async (req, res) => {
  * POST /api/purchases
  * Required fields: id, store_id, supplier_id, date
  * Optional fields: status, total_grams_21k_equivalent, total_base_fees, total_discount_amount, total_net_fees, due_date
- * Automatically creates a corresponding purchase_suppliers record
+ * Automatically creates corresponding records in:
+ * - purchase_suppliers table
+ * - purchase_receipts table (receipt #1)
  */
 const createPurchase = async (req, res) => {
   try {
@@ -116,12 +123,13 @@ const createPurchase = async (req, res) => {
       store_id,
       supplier_id,
       date,
-      status = "Pending",
+      status = STATUS_VALUES.PENDING,
       total_grams_21k_equivalent = 0,
       total_base_fees = 0,
       total_discount_amount = 0,
       total_net_fees = 0,
       due_date,
+      receipts = [], // New field for individual receipts
     } = req.body;
 
     // Validation
@@ -237,12 +245,112 @@ const createPurchase = async (req, res) => {
         ]
       );
 
+      // Create individual receipts if provided
+      let createdReceipts = [];
+      if (receipts && receipts.length > 0) {
+        for (let i = 0; i < receipts.length; i++) {
+          const receipt = receipts[i];
+          const receiptId = `pr-${id}-${receipt.supplier_id}-${receipt.receipt_number}`;
+
+          // Calculate grams based on karat type
+          const grams18k =
+            receipt.karat_type === KARAT_TYPES.EIGHTEEN ? receipt.grams : 0;
+          const grams21k =
+            receipt.karat_type === KARAT_TYPES.TWENTY_ONE ? receipt.grams : 0;
+          const totalGrams21k =
+            receipt.karat_type === KARAT_TYPES.EIGHTEEN
+              ? receipt.grams * PURCHASE_CONSTANTS.KARAT_CONVERSION_RATE
+              : receipt.grams;
+
+          await connection.execute(
+            `INSERT INTO purchase_receipts (id, purchase_id, supplier_id, receipt_number, grams_18k, grams_21k, total_grams_21k, base_fees, discount_rate, discount_amount, net_fees) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+              receiptId,
+              id,
+              receipt.supplier_id,
+              receipt.receipt_number,
+              grams18k,
+              grams21k,
+              totalGrams21k,
+              receipt.total_base_fee,
+              receipt.discount_percentage || 0,
+              receipt.total_discount_amount || 0,
+              receipt.total_net_fee,
+            ]
+          );
+
+          createdReceipts.push({
+            id: receiptId,
+            purchase_id: id,
+            supplier_id: receipt.supplier_id,
+            receipt_number: receipt.receipt_number,
+            receipt_date: receipt.receipt_date,
+            karat_type: receipt.karat_type,
+            grams: receipt.grams,
+            base_fee_per_gram: receipt.base_fee_per_gram,
+            discount_percentage: receipt.discount_percentage || 0,
+            net_fee_per_gram: receipt.net_fee_per_gram,
+            total_base_fee: receipt.total_base_fee,
+            total_discount_amount: receipt.total_discount_amount || 0,
+            total_net_fee: receipt.total_net_fee,
+            notes: receipt.notes,
+          });
+        }
+      } else {
+        // Create a default receipt if no receipts provided (backward compatibility)
+        const purchaseReceiptId = `pr-${id}-${supplier_id}-1`;
+        const receiptNumber = 1;
+        const receiptDate = date;
+
+        // Calculate discount rate if there's a discount amount
+        const discountRate =
+          total_discount_amount > 0 && total_base_fees > 0
+            ? (total_discount_amount / total_base_fees) * 100
+            : 0;
+
+        await connection.execute(
+          `INSERT INTO purchase_receipts (id, purchase_id, supplier_id, receipt_number, grams_18k, grams_21k, total_grams_21k, base_fees, discount_rate, discount_amount, net_fees) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            purchaseReceiptId,
+            id,
+            supplier_id,
+            receiptNumber,
+            0, // grams_18k - default to 0
+            total_grams_21k_equivalent, // grams_21k - use the total grams as 21k equivalent
+            total_grams_21k_equivalent, // total_grams_21k
+            total_base_fees,
+            discountRate,
+            total_discount_amount,
+            total_net_fees,
+          ]
+        );
+
+        createdReceipts.push({
+          id: purchaseReceiptId,
+          purchase_id: id,
+          supplier_id: supplier_id,
+          receipt_number: receiptNumber,
+          receipt_date: receiptDate,
+          karat_type: "21",
+          grams: total_grams_21k_equivalent,
+          base_fee_per_gram: total_base_fees,
+          discount_percentage: discountRate,
+          net_fee_per_gram: total_net_fees,
+          total_base_fee: total_base_fees,
+          total_discount_amount: total_discount_amount,
+          total_net_fee: total_net_fees,
+        });
+      }
+
       // Commit the transaction
       await connection.commit();
 
       const response = {
         success: true,
-        message: "Purchase and purchase supplier created successfully",
+        message:
+          "Purchase, purchase supplier, and purchase receipts created successfully",
         data: {
           id,
           store_id,
@@ -257,6 +365,8 @@ const createPurchase = async (req, res) => {
           store_name: storeCheck[0].name,
           supplier_name: supplierCheck[0].name,
           purchase_supplier_id: purchaseSupplierId,
+          created_receipts: createdReceipts,
+          receipts_count: createdReceipts.length,
         },
       };
       console.log(
@@ -467,15 +577,54 @@ const deletePurchase = async (req, res) => {
       });
     }
 
-    const [result] = await pool.execute("DELETE FROM purchases WHERE id = ?", [
-      id,
-    ]);
+    // Start transaction to ensure both purchase and purchase_suppliers are deleted
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
 
-    res.json({
-      success: true,
-      message: "Purchase deleted successfully",
-      affectedRows: result.affectedRows,
-    });
+    try {
+      // Delete purchase_receipts records first (due to foreign key constraints)
+      const [purchaseReceiptsResult] = await connection.execute(
+        "DELETE FROM purchase_receipts WHERE purchase_id = ?",
+        [id]
+      );
+
+      // Delete purchase_suppliers records (due to foreign key constraints)
+      const [purchaseSuppliersResult] = await connection.execute(
+        "DELETE FROM purchase_suppliers WHERE purchase_id = ?",
+        [id]
+      );
+
+      // Delete the purchase
+      const [purchaseResult] = await connection.execute(
+        "DELETE FROM purchases WHERE id = ?",
+        [id]
+      );
+
+      // Commit the transaction
+      await connection.commit();
+
+      const response = {
+        success: true,
+        message: "Purchase and related records deleted successfully",
+        data: {
+          purchase_affected_rows: purchaseResult.affectedRows,
+          purchase_suppliers_affected_rows:
+            purchaseSuppliersResult.affectedRows,
+          purchase_receipts_affected_rows: purchaseReceiptsResult.affectedRows,
+        },
+      };
+      console.log(
+        "📤 DELETE /api/purchases Response:",
+        JSON.stringify(response, null, 2)
+      );
+      res.json(response);
+    } catch (error) {
+      // Rollback the transaction on error
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   } catch (error) {
     console.error("Error deleting purchase:", error);
     res.status(500).json({

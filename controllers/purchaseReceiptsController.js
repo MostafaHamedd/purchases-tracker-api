@@ -1,4 +1,5 @@
 const { pool } = require("../config/database");
+const { PURCHASE_CONSTANTS, KARAT_TYPES } = require("../constants");
 
 // ============================================================================
 // PURCHASE RECEIPTS CONTROLLER
@@ -122,7 +123,7 @@ const getPurchaseReceiptsByPurchase = async (req, res) => {
       FROM purchase_receipts pr
       JOIN suppliers s ON pr.supplier_id = s.id
       WHERE pr.purchase_id = ?
-      ORDER BY pr.receipt_date, pr.receipt_number
+      ORDER BY pr.receipt_number
     `,
       [purchaseId]
     );
@@ -240,6 +241,218 @@ const getPurchaseReceiptByReceiptNumber = async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Failed to fetch purchase receipt by receipt number",
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Create multiple purchase receipts in bulk
+ * POST /api/purchase-receipts/bulk
+ * Body: { purchase_id, receipts: [{ supplier_id, receipt_number, receipt_date, karat_type, grams, base_fee_per_gram, net_fee_per_gram, total_base_fee, total_net_fee, discount_percentage?, total_discount_amount?, notes? }] }
+ */
+const createBulkPurchaseReceipts = async (req, res) => {
+  try {
+    const { purchase_id, receipts } = req.body;
+
+    // Validation
+    if (
+      !purchase_id ||
+      !receipts ||
+      !Array.isArray(receipts) ||
+      receipts.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing required fields",
+        required: ["purchase_id", "receipts"],
+      });
+    }
+
+    // Check if purchase exists
+    const [purchaseCheck] = await pool.execute(
+      "SELECT id FROM purchases WHERE id = ?",
+      [purchase_id]
+    );
+
+    if (purchaseCheck.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Purchase not found",
+      });
+    }
+
+    // Validate each receipt
+    for (let i = 0; i < receipts.length; i++) {
+      const receipt = receipts[i];
+      if (
+        !receipt.supplier_id ||
+        !receipt.receipt_number ||
+        !receipt.receipt_date ||
+        !receipt.karat_type ||
+        receipt.grams === undefined ||
+        receipt.base_fee_per_gram === undefined ||
+        receipt.net_fee_per_gram === undefined ||
+        receipt.total_base_fee === undefined ||
+        receipt.total_net_fee === undefined
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: `Missing required fields in receipt ${i + 1}`,
+          required: [
+            "supplier_id",
+            "receipt_number",
+            "receipt_date",
+            "karat_type",
+            "grams",
+            "base_fee_per_gram",
+            "net_fee_per_gram",
+            "total_base_fee",
+            "total_net_fee",
+          ],
+        });
+      }
+
+      // Validate karat_type
+      if (!["18", "21"].includes(receipt.karat_type)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid karat_type in receipt ${i + 1}. Must be '18' or '21'`,
+        });
+      }
+
+      // Validate date format
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(receipt.receipt_date)) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid receipt_date format in receipt ${
+            i + 1
+          }. Use YYYY-MM-DD`,
+        });
+      }
+
+      // Validate numeric fields
+      if (
+        receipt.grams <= 0 ||
+        receipt.base_fee_per_gram < 0 ||
+        receipt.net_fee_per_gram < 0 ||
+        receipt.total_base_fee < 0 ||
+        receipt.total_net_fee < 0 ||
+        (receipt.discount_percentage &&
+          (receipt.discount_percentage < 0 ||
+            receipt.discount_percentage > 100)) ||
+        (receipt.total_discount_amount && receipt.total_discount_amount < 0)
+      ) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid numeric values in receipt ${i + 1}`,
+        });
+      }
+    }
+
+    // Check if all suppliers exist
+    const supplierIds = [...new Set(receipts.map((r) => r.supplier_id))];
+    const [supplierCheck] = await pool.execute(
+      `SELECT id FROM suppliers WHERE id IN (${supplierIds
+        .map(() => "?")
+        .join(",")})`,
+      supplierIds
+    );
+
+    if (supplierCheck.length !== supplierIds.length) {
+      return res.status(400).json({
+        success: false,
+        error: "One or more suppliers not found",
+      });
+    }
+
+    // Start transaction
+    const connection = await pool.getConnection();
+    await connection.beginTransaction();
+
+    try {
+      const createdReceipts = [];
+
+      for (const receipt of receipts) {
+        const receiptId = `pr-${purchase_id}-${receipt.supplier_id}-${receipt.receipt_number}`;
+
+        // Calculate grams based on karat type
+        const grams18k =
+          receipt.karat_type === KARAT_TYPES.EIGHTEEN ? receipt.grams : 0;
+        const grams21k =
+          receipt.karat_type === KARAT_TYPES.TWENTY_ONE ? receipt.grams : 0;
+        const totalGrams21k =
+          receipt.karat_type === KARAT_TYPES.EIGHTEEN
+            ? receipt.grams * PURCHASE_CONSTANTS.KARAT_CONVERSION_RATE
+            : receipt.grams;
+
+        await connection.execute(
+          `INSERT INTO purchase_receipts (id, purchase_id, supplier_id, receipt_number, grams_18k, grams_21k, total_grams_21k, base_fees, discount_rate, discount_amount, net_fees) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            receiptId,
+            purchase_id,
+            receipt.supplier_id,
+            receipt.receipt_number,
+            grams18k,
+            grams21k,
+            totalGrams21k,
+            receipt.total_base_fee,
+            receipt.discount_percentage || 0,
+            receipt.total_discount_amount || 0,
+            receipt.total_net_fee,
+          ]
+        );
+
+        createdReceipts.push({
+          id: receiptId,
+          purchase_id,
+          supplier_id: receipt.supplier_id,
+          receipt_number: receipt.receipt_number,
+          receipt_date: receipt.receipt_date,
+          karat_type: receipt.karat_type,
+          grams: receipt.grams,
+          base_fee_per_gram: receipt.base_fee_per_gram,
+          discount_percentage: receipt.discount_percentage || 0,
+          net_fee_per_gram: receipt.net_fee_per_gram,
+          total_base_fee: receipt.total_base_fee,
+          total_discount_amount: receipt.total_discount_amount || 0,
+          total_net_fee: receipt.total_net_fee,
+          notes: receipt.notes,
+        });
+      }
+
+      // Commit transaction
+      await connection.commit();
+
+      res.status(201).json({
+        success: true,
+        message: `${createdReceipts.length} purchase receipts created successfully`,
+        data: createdReceipts,
+        count: createdReceipts.length,
+      });
+    } catch (error) {
+      // Rollback transaction on error
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  } catch (error) {
+    console.error("Error creating bulk purchase receipts:", error);
+
+    // Handle duplicate key error
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        success: false,
+        error:
+          "One or more purchase receipts with this receipt number already exist",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: "Failed to create purchase receipts",
       message: error.message,
     });
   }
@@ -364,24 +577,26 @@ const createPurchaseReceipt = async (req, res) => {
       });
     }
 
+    // Calculate grams based on karat type
+    const grams18k = karat_type === "18" ? grams : 0;
+    const grams21k = karat_type === "21" ? grams : 0;
+    const totalGrams21k = karat_type === "18" ? grams * 0.857 : grams; // Convert 18k to 21k equivalent
+
     const [result] = await pool.execute(
-      `INSERT INTO purchase_receipts (id, purchase_id, supplier_id, receipt_number, receipt_date, karat_type, grams, base_fee_per_gram, discount_percentage, net_fee_per_gram, total_base_fee, total_discount_amount, total_net_fee, notes) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO purchase_receipts (id, purchase_id, supplier_id, receipt_number, grams_18k, grams_21k, total_grams_21k, base_fees, discount_rate, discount_amount, net_fees) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         purchase_id,
         supplier_id,
         receipt_number,
-        receipt_date,
-        karat_type,
-        grams,
-        base_fee_per_gram,
-        discount_percentage,
-        net_fee_per_gram,
+        grams18k,
+        grams21k,
+        totalGrams21k,
         total_base_fee,
+        discount_percentage,
         total_discount_amount,
         total_net_fee,
-        notes || null, // Convert undefined to null
       ]
     );
 
@@ -695,6 +910,7 @@ module.exports = {
   getPurchaseReceiptsByPurchase,
   getPurchaseReceiptsBySupplier,
   getPurchaseReceiptByReceiptNumber,
+  createBulkPurchaseReceipts,
   createPurchaseReceipt,
   updatePurchaseReceipt,
   deletePurchaseReceipt,
