@@ -182,12 +182,15 @@ const getPaymentsByPurchase = async (req, res) => {
   try {
     const { purchaseId } = req.params;
 
+    console.log(`🔍 Getting payments for purchase: ${purchaseId}`);
+
     // Check if purchase exists
     const [purchaseRows] = await pool.execute(
       "SELECT id, total_net_fees FROM purchases WHERE id = ?",
       [purchaseId]
     );
     if (purchaseRows.length === 0) {
+      console.log(`❌ Purchase not found: ${purchaseId}`);
       return res.status(404).json({
         success: false,
         error: "Purchase not found",
@@ -203,6 +206,15 @@ const getPaymentsByPurchase = async (req, res) => {
       ORDER BY pay.date DESC, pay.created_at DESC
     `,
       [purchaseId]
+    );
+
+    console.log(
+      `📄 Found ${payments.length} payments for purchase ${purchaseId}:`,
+      payments.map((p) => ({
+        id: p.id,
+        purchase_id: p.purchase_id,
+        fees_paid: p.fees_paid,
+      }))
     );
 
     const totalPaid = payments.reduce(
