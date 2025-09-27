@@ -4,6 +4,8 @@ const {
   STATUS_VALUES,
   KARAT_TYPES,
 } = require("../constants");
+const DiscountCalculationService = require("../services/discountCalculationService");
+const RecalculationService = require("../services/recalculationService");
 
 // ============================================================================
 // PURCHASES CONTROLLER
@@ -18,6 +20,46 @@ const {
  */
 const getAllPurchases = async (req, res) => {
   try {
+    // Check if we should verify discounts
+    const verifyDiscounts = req.query.verify_discounts === "true";
+    let recalculatedCount = 0;
+
+    if (verifyDiscounts) {
+      console.log(
+        "🔄 Verifying and recalculating discounts for all purchases..."
+      );
+
+      // Get all suppliers from current month purchases
+      const [suppliers] = await pool.execute(`
+        SELECT DISTINCT pr.supplier_id
+        FROM purchases p
+        JOIN purchase_receipts pr ON p.id = pr.purchase_id
+        WHERE DATE_FORMAT(p.created_at, '%Y-%m') = DATE_FORMAT(CURDATE(), '%Y-%m')
+      `);
+
+      // Recalculate discounts for each supplier in the current month
+      const suppliersToRecalculate = new Set();
+      suppliers.forEach((supplier) => {
+        suppliersToRecalculate.add(supplier.supplier_id);
+      });
+
+      for (const supplierId of suppliersToRecalculate) {
+        const currentMonth = RecalculationService.getCurrentMonth();
+        const result = await RecalculationService.recalculateSupplierDiscounts(
+          supplierId,
+          currentMonth
+        );
+        if (result.success) {
+          recalculatedCount += result.updated || 0;
+          console.log(
+            `✅ Recalculated ${result.updated} receipts for supplier ${supplierId}`
+          );
+        }
+      }
+
+      console.log(`🔄 Total receipts recalculated: ${recalculatedCount}`);
+    }
+
     // Simple query first to test
     const [rows] = await pool.execute(`
       SELECT 
@@ -33,6 +75,7 @@ const getAllPurchases = async (req, res) => {
       success: true,
       data: rows,
       count: rows.length,
+      ...(verifyDiscounts && { recalculated: recalculatedCount }),
     };
 
     console.log(
@@ -262,6 +305,26 @@ const createPurchase = async (req, res) => {
               ? receipt.grams * PURCHASE_CONSTANTS.KARAT_CONVERSION_RATE
               : receipt.grams;
 
+          // Calculate base fee if not provided
+          const baseFee =
+            receipt.total_base_fee ||
+            receipt.grams *
+              (receipt.base_fee_per_gram ||
+                PURCHASE_CONSTANTS.BASE_FEE_PER_GRAM);
+
+          // Calculate discount automatically using the actual base fee
+          const discountResult =
+            await DiscountCalculationService.calculateReceiptDiscount(
+              receipt.supplier_id,
+              receipt.grams,
+              receipt.karat_type,
+              id,
+              baseFee
+            );
+
+          // Calculate net fee
+          const netFee = baseFee - discountResult.discountAmount;
+
           await connection.execute(
             `INSERT INTO purchase_receipts (id, purchase_id, supplier_id, receipt_number, grams_18k, grams_21k, total_grams_21k, base_fees, discount_rate, discount_amount, net_fees) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -273,10 +336,10 @@ const createPurchase = async (req, res) => {
               grams18k,
               grams21k,
               totalGrams21k,
-              receipt.total_base_fee,
-              receipt.discount_percentage || 0,
-              receipt.total_discount_amount || 0,
-              receipt.total_net_fee,
+              baseFee,
+              discountResult.discountRate,
+              discountResult.discountAmount,
+              netFee,
             ]
           );
 
@@ -288,13 +351,16 @@ const createPurchase = async (req, res) => {
             receipt_date: receipt.receipt_date,
             karat_type: receipt.karat_type,
             grams: receipt.grams,
-            base_fee_per_gram: receipt.base_fee_per_gram,
-            discount_percentage: receipt.discount_percentage || 0,
-            net_fee_per_gram: receipt.net_fee_per_gram,
-            total_base_fee: receipt.total_base_fee,
-            total_discount_amount: receipt.total_discount_amount || 0,
-            total_net_fee: receipt.total_net_fee,
+            base_fee_per_gram:
+              receipt.base_fee_per_gram || PURCHASE_CONSTANTS.BASE_FEE_PER_GRAM,
+            discount_percentage: discountResult.discountRate,
+            net_fee_per_gram: netFee / receipt.grams,
+            total_base_fee: baseFee,
+            total_discount_amount: discountResult.discountAmount,
+            total_net_fee: netFee,
             notes: receipt.notes,
+            discount_tier: discountResult.tier,
+            monthly_total: discountResult.monthlyTotal,
           });
         }
       } else {
@@ -303,11 +369,22 @@ const createPurchase = async (req, res) => {
         const receiptNumber = 1;
         const receiptDate = date;
 
-        // Calculate discount rate if there's a discount amount
-        const discountRate =
-          total_discount_amount > 0 && total_base_fees > 0
-            ? (total_discount_amount / total_base_fees) * 100
-            : 0;
+        // Use calculated values or provided values
+        const baseFee =
+          total_base_fees ||
+          total_grams_21k_equivalent * PURCHASE_CONSTANTS.BASE_FEE_PER_GRAM;
+
+        // Calculate discount automatically for default receipt using the actual base fee
+        const discountResult =
+          await DiscountCalculationService.calculateReceiptDiscount(
+            supplier_id,
+            total_grams_21k_equivalent,
+            "21", // Default to 21k
+            id,
+            baseFee
+          );
+        const discountAmount = discountResult.discountAmount;
+        const netFee = baseFee - discountAmount;
 
         await connection.execute(
           `INSERT INTO purchase_receipts (id, purchase_id, supplier_id, receipt_number, grams_18k, grams_21k, total_grams_21k, base_fees, discount_rate, discount_amount, net_fees) 
@@ -320,10 +397,10 @@ const createPurchase = async (req, res) => {
             0, // grams_18k - default to 0
             total_grams_21k_equivalent, // grams_21k - use the total grams as 21k equivalent
             total_grams_21k_equivalent, // total_grams_21k
-            total_base_fees,
-            discountRate,
-            total_discount_amount,
-            total_net_fees,
+            baseFee,
+            discountResult.discountRate,
+            discountAmount,
+            netFee,
           ]
         );
 
@@ -335,17 +412,83 @@ const createPurchase = async (req, res) => {
           receipt_date: receiptDate,
           karat_type: "21",
           grams: total_grams_21k_equivalent,
-          base_fee_per_gram: total_base_fees,
-          discount_percentage: discountRate,
-          net_fee_per_gram: total_net_fees,
-          total_base_fee: total_base_fees,
-          total_discount_amount: total_discount_amount,
-          total_net_fee: total_net_fees,
+          base_fee_per_gram: PURCHASE_CONSTANTS.BASE_FEE_PER_GRAM,
+          discount_percentage: discountResult.discountRate,
+          net_fee_per_gram: netFee / total_grams_21k_equivalent,
+          total_base_fee: baseFee,
+          total_discount_amount: discountAmount,
+          total_net_fee: netFee,
+          discount_tier: discountResult.tier,
+          monthly_total: discountResult.monthlyTotal,
         });
       }
 
+      // Recalculate purchase totals from all created receipts
+      const recalculatedTotals =
+        DiscountCalculationService.calculatePurchaseTotals(createdReceipts);
+
+      // Update purchase with recalculated totals
+      await connection.execute(
+        `UPDATE purchases SET 
+         total_grams_21k_equivalent = ?, 
+         total_base_fees = ?, 
+         total_discount_amount = ?, 
+         total_net_fees = ? 
+         WHERE id = ?`,
+        [
+          recalculatedTotals.totalGrams21kEquivalent,
+          recalculatedTotals.totalBaseFees,
+          recalculatedTotals.totalDiscountAmount,
+          recalculatedTotals.totalNetFees,
+          id,
+        ]
+      );
+
+      // Update purchase_supplier with recalculated totals
+      await connection.execute(
+        `UPDATE purchase_suppliers SET 
+         total_grams_21k_equivalent = ?, 
+         total_base_fees = ?, 
+         total_discount_amount = ?, 
+         total_net_fees = ?,
+         receipt_count = ?
+         WHERE purchase_id = ? AND supplier_id = ?`,
+        [
+          recalculatedTotals.totalGrams21kEquivalent,
+          recalculatedTotals.totalBaseFees,
+          recalculatedTotals.totalDiscountAmount,
+          recalculatedTotals.totalNetFees,
+          createdReceipts.length,
+          id,
+          supplier_id,
+        ]
+      );
+
       // Commit the transaction
       await connection.commit();
+
+      // Trigger recalculation for all receipts of this supplier in the current month
+      // This ensures discounts are updated for all receipts when monthly totals change
+      const currentMonth = RecalculationService.getCurrentMonth();
+      console.log(
+        `🔄 Triggering recalculation for supplier ${supplier_id} in ${currentMonth}`
+      );
+
+      // Run recalculation in background (don't wait for it to complete)
+      RecalculationService.recalculateSupplierDiscounts(
+        supplier_id,
+        currentMonth
+      )
+        .then((result) => {
+          if (result.success) {
+            console.log(`✅ Recalculation completed: ${result.message}`);
+          } else {
+            console.error(`❌ Recalculation failed: ${result.error}`);
+          }
+        })
+        .catch((error) => {
+          console.error("❌ Recalculation error:", error);
+        });
 
       const response = {
         success: true,
@@ -602,6 +745,30 @@ const deletePurchase = async (req, res) => {
 
       // Commit the transaction
       await connection.commit();
+
+      // Trigger recalculation for all receipts of this supplier in the current month
+      // This ensures discounts are updated when monthly totals change due to deletion
+      const currentMonth = RecalculationService.getCurrentMonth();
+      console.log(
+        `🔄 Triggering recalculation after purchase deletion for supplier in ${currentMonth}`
+      );
+
+      // Run recalculation in background (don't wait for it to complete)
+      RecalculationService.recalculateMonthDiscounts(currentMonth)
+        .then((result) => {
+          if (result.success) {
+            console.log(
+              `✅ Recalculation completed after deletion: ${result.message}`
+            );
+          } else {
+            console.error(
+              `❌ Recalculation failed after deletion: ${result.error}`
+            );
+          }
+        })
+        .catch((error) => {
+          console.error("❌ Recalculation error after deletion:", error);
+        });
 
       const response = {
         success: true,

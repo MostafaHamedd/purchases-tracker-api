@@ -1,4 +1,6 @@
 const { pool } = require("../config/database");
+const DiscountCalculationService = require("../services/discountCalculationService");
+const RecalculationService = require("../services/recalculationService");
 const { PURCHASE_CONSTANTS, KARAT_TYPES } = require("../constants");
 
 // ============================================================================
@@ -425,6 +427,33 @@ const createBulkPurchaseReceipts = async (req, res) => {
       // Commit transaction
       await connection.commit();
 
+      // Trigger recalculation for all receipts of this supplier in the current month
+      // This ensures discounts are updated when monthly totals change
+      const currentMonth = RecalculationService.getCurrentMonth();
+      console.log(
+        `🔄 Triggering recalculation after receipt creation for supplier in ${currentMonth}`
+      );
+
+      // Run recalculation in background (don't wait for it to complete)
+      RecalculationService.recalculateMonthDiscounts(currentMonth)
+        .then((result) => {
+          if (result.success) {
+            console.log(
+              `✅ Recalculation completed after receipt creation: ${result.message}`
+            );
+          } else {
+            console.error(
+              `❌ Recalculation failed after receipt creation: ${result.error}`
+            );
+          }
+        })
+        .catch((error) => {
+          console.error(
+            "❌ Recalculation error after receipt creation:",
+            error
+          );
+        });
+
       res.status(201).json({
         success: true,
         message: `${createdReceipts.length} purchase receipts created successfully`,
@@ -541,13 +570,13 @@ const createPurchaseReceipt = async (req, res) => {
       total_base_fee < 0 ||
       total_net_fee < 0 ||
       discount_percentage < 0 ||
-      discount_percentage > 100 ||
+      discount_percentage > 1 ||
       total_discount_amount < 0
     ) {
       return res.status(400).json({
         success: false,
         error:
-          "Invalid numeric values. Grams must be > 0, fees must be >= 0, discount percentage must be 0-100",
+          "Invalid numeric values. Grams must be > 0, fees must be >= 0, discount percentage must be 0-1 (decimal)",
       });
     }
 
@@ -582,6 +611,24 @@ const createPurchaseReceipt = async (req, res) => {
     const grams21k = karat_type === "21" ? grams : 0;
     const totalGrams21k = karat_type === "18" ? grams * 0.857 : grams; // Convert 18k to 21k equivalent
 
+    // Calculate base fee if not provided
+    const baseFee =
+      total_base_fee ||
+      grams * (base_fee_per_gram || PURCHASE_CONSTANTS.BASE_FEE_PER_GRAM);
+
+    // Calculate discount automatically using the actual base fee
+    const discountResult =
+      await DiscountCalculationService.calculateReceiptDiscount(
+        supplier_id,
+        grams,
+        karat_type,
+        purchase_id,
+        baseFee
+      );
+
+    // Calculate net fee
+    const netFee = baseFee - discountResult.discountAmount;
+
     const [result] = await pool.execute(
       `INSERT INTO purchase_receipts (id, purchase_id, supplier_id, receipt_number, grams_18k, grams_21k, total_grams_21k, base_fees, discount_rate, discount_amount, net_fees) 
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -593,12 +640,39 @@ const createPurchaseReceipt = async (req, res) => {
         grams18k,
         grams21k,
         totalGrams21k,
-        total_base_fee,
-        discount_percentage,
-        total_discount_amount,
-        total_net_fee,
+        baseFee,
+        discountResult.discountRate,
+        discountResult.discountAmount,
+        netFee,
       ]
     );
+
+    // Trigger recalculation for all receipts of this supplier in the current month
+    // This ensures discounts are updated when monthly totals change
+    const currentMonth = RecalculationService.getCurrentMonth();
+    console.log(
+      `🔄 Triggering recalculation after single receipt creation for supplier ${supplier_id} in ${currentMonth}`
+    );
+
+    // Run recalculation in background (don't wait for it to complete)
+    RecalculationService.recalculateSupplierDiscounts(supplier_id, currentMonth)
+      .then((result) => {
+        if (result.success) {
+          console.log(
+            `✅ Recalculation completed after single receipt creation: ${result.message}`
+          );
+        } else {
+          console.error(
+            `❌ Recalculation failed after single receipt creation: ${result.error}`
+          );
+        }
+      })
+      .catch((error) => {
+        console.error(
+          "❌ Recalculation error after single receipt creation:",
+          error
+        );
+      });
 
     res.status(201).json({
       success: true,
@@ -611,13 +685,16 @@ const createPurchaseReceipt = async (req, res) => {
         receipt_date,
         karat_type,
         grams,
-        base_fee_per_gram,
-        discount_percentage,
-        net_fee_per_gram,
-        total_base_fee,
-        total_discount_amount,
-        total_net_fee,
+        base_fee_per_gram:
+          base_fee_per_gram || PURCHASE_CONSTANTS.BASE_FEE_PER_GRAM,
+        discount_percentage: discountResult.discountRate,
+        net_fee_per_gram: netFee / grams,
+        total_base_fee: baseFee,
+        total_discount_amount: discountResult.discountAmount,
+        total_net_fee: netFee,
         notes,
+        discount_tier: discountResult.tier,
+        monthly_total: discountResult.monthlyTotal,
       },
     });
   } catch (error) {
@@ -887,6 +964,30 @@ const deletePurchaseReceipt = async (req, res) => {
       "DELETE FROM purchase_receipts WHERE id = ?",
       [id]
     );
+
+    // Trigger recalculation for all receipts of this supplier in the current month
+    // This ensures discounts are updated when monthly totals change due to deletion
+    const currentMonth = RecalculationService.getCurrentMonth();
+    console.log(
+      `🔄 Triggering recalculation after receipt deletion for supplier in ${currentMonth}`
+    );
+
+    // Run recalculation in background (don't wait for it to complete)
+    RecalculationService.recalculateMonthDiscounts(currentMonth)
+      .then((result) => {
+        if (result.success) {
+          console.log(
+            `✅ Recalculation completed after receipt deletion: ${result.message}`
+          );
+        } else {
+          console.error(
+            `❌ Recalculation failed after receipt deletion: ${result.error}`
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("❌ Recalculation error after receipt deletion:", error);
+      });
 
     res.json({
       success: true,

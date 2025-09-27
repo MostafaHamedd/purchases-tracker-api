@@ -83,7 +83,13 @@ const createSupplier = async (req, res) => {
   try {
     logRequest("POST", "/api/suppliers", req.body);
 
-    const { id, name, code, is_active = true } = req.body;
+    const {
+      id,
+      name,
+      code,
+      supplier_karat_type = "21",
+      is_active = true,
+    } = req.body;
 
     // Validation
     if (!id || !name || !code) {
@@ -96,6 +102,14 @@ const createSupplier = async (req, res) => {
       return res.status(400).json(validationResponse);
     }
 
+    // Validate supplier_karat_type
+    if (!["18", "21"].includes(supplier_karat_type)) {
+      return res.status(400).json({
+        success: false,
+        error: "supplier_karat_type must be either '18' or '21'",
+      });
+    }
+
     // Validate code format (should be uppercase, 3-10 characters)
     if (!/^[A-Z0-9]{3,10}$/.test(code)) {
       return res.status(400).json({
@@ -105,9 +119,9 @@ const createSupplier = async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      `INSERT INTO suppliers (id, name, code, is_active) 
-       VALUES (?, ?, ?, ?)`,
-      [id, name, code, is_active]
+      `INSERT INTO suppliers (id, name, code, supplier_karat_type, is_active) 
+       VALUES (?, ?, ?, ?, ?)`,
+      [id, name, code, supplier_karat_type, is_active]
     );
 
     res.status(201).json({
@@ -117,6 +131,7 @@ const createSupplier = async (req, res) => {
         id,
         name,
         code,
+        supplier_karat_type,
         is_active,
       },
     });
@@ -142,12 +157,12 @@ const createSupplier = async (req, res) => {
 /**
  * Update supplier
  * PUT /api/suppliers/:id
- * Optional fields: name, code, is_active
+ * Optional fields: name, code, supplier_karat_type, is_active
  */
 const updateSupplier = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, code, is_active } = req.body;
+    const { name, code, supplier_karat_type, is_active } = req.body;
 
     // Check if supplier exists
     const [existingSupplier] = await pool.execute(
@@ -181,6 +196,17 @@ const updateSupplier = async (req, res) => {
       }
       updateFields.push("code = ?");
       updateValues.push(code);
+    }
+
+    if (supplier_karat_type !== undefined) {
+      if (!["18", "21"].includes(supplier_karat_type)) {
+        return res.status(400).json({
+          success: false,
+          error: "supplier_karat_type must be either '18' or '21'",
+        });
+      }
+      updateFields.push("supplier_karat_type = ?");
+      updateValues.push(supplier_karat_type);
     }
 
     if (is_active !== undefined) {

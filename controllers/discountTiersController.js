@@ -172,11 +172,11 @@ const createDiscountTier = async (req, res) => {
       });
     }
 
-    // Validate karat_type
-    if (!["18", "21"].includes(karat_type)) {
+    // Validate karat_type (only 21k supported now)
+    if (karat_type !== "21") {
       return res.status(400).json({
         success: false,
-        error: "karat_type must be either '18' or '21'",
+        error: "karat_type must be '21' (18k support removed)",
       });
     }
 
@@ -188,11 +188,12 @@ const createDiscountTier = async (req, res) => {
       });
     }
 
-    // Validate discount_percentage (must be between 0 and 100)
-    if (discount_percentage < 0 || discount_percentage > 100) {
+    // Validate discount_percentage (must be between 0 and 1 for decimal percentages)
+    if (discount_percentage < 0 || discount_percentage > 1) {
       return res.status(400).json({
         success: false,
-        error: "discount_percentage must be between 0 and 100",
+        error:
+          "discount_percentage must be between 0 and 1 (decimal percentage, e.g., 0.05 for 5%)",
       });
     }
 
@@ -308,10 +309,10 @@ const updateDiscountTier = async (req, res) => {
     }
 
     if (karat_type !== undefined) {
-      if (!["18", "21"].includes(karat_type)) {
+      if (karat_type !== "21") {
         return res.status(400).json({
           success: false,
-          error: "karat_type must be either '18' or '21'",
+          error: "karat_type must be '21' (18k support removed)",
         });
       }
       updateFields.push("karat_type = ?");
@@ -335,10 +336,11 @@ const updateDiscountTier = async (req, res) => {
     }
 
     if (discount_percentage !== undefined) {
-      if (discount_percentage < 0 || discount_percentage > 100) {
+      if (discount_percentage < 0 || discount_percentage > 1) {
         return res.status(400).json({
           success: false,
-          error: "discount_percentage must be between 0 and 100",
+          error:
+            "discount_percentage must be between 0 and 1 (decimal percentage, e.g., 0.05 for 5%)",
         });
       }
       updateFields.push("discount_percentage = ?");
@@ -447,5 +449,3 @@ module.exports = {
   updateDiscountTier,
   deleteDiscountTier,
 };
-
-

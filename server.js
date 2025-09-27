@@ -15,6 +15,7 @@ const purchasesRoutes = require("./routes/purchases");
 const purchaseSuppliersRoutes = require("./routes/purchaseSuppliers");
 const purchaseReceiptsRoutes = require("./routes/purchaseReceipts");
 const paymentsRoutes = require("./routes/payments");
+const monthlyTotalsRoutes = require("./routes/monthlyTotals");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -50,6 +51,7 @@ app.use("/api/purchases", purchasesRoutes);
 app.use("/api/purchase-suppliers", purchaseSuppliersRoutes);
 app.use("/api/purchase-receipts", purchaseReceiptsRoutes);
 app.use("/api/payments", paymentsRoutes);
+app.use("/api/monthly-totals", monthlyTotalsRoutes);
 
 // Individual receipt and payment routes (for documentation compliance)
 app.use("/api/receipts", purchaseReceiptsRoutes);

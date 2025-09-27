@@ -17,13 +17,19 @@ const calculate21kEquivalent = (grams18k = 0, grams21k = 0) => {
 
 /**
  * Calculate discount amount
- * Formula: total_grams_21k * discount_rate
+ * Formula: base_fee * discount_percentage
  * @param {number} totalGrams21k - Total grams in 21k equivalent
- * @param {number} discountRate - Discount rate per gram
+ * @param {number} discountPercentage - Discount percentage (decimal, e.g., 0.05 for 5%)
+ * @param {number} baseFeePerGram - Base fee per gram (default 5 EGP)
  * @returns {number} Total discount amount
  */
-const calculateDiscountAmount = (totalGrams21k, discountRate) => {
-  return parseFloat((totalGrams21k * discountRate).toFixed(2));
+const calculateDiscountAmount = (
+  totalGrams21k,
+  discountPercentage,
+  baseFeePerGram = 5
+) => {
+  const baseFee = totalGrams21k * baseFeePerGram;
+  return parseFloat((baseFee * discountPercentage).toFixed(2));
 };
 
 /**
@@ -71,7 +77,7 @@ const calculateMonthlyTotals = async (supplierId, year, month) => {
  * @param {string} supplierId - Supplier ID
  * @param {number} totalGrams - Total grams for the month
  * @param {string} karatType - Karat type ('18' or '21')
- * @returns {Promise<number>} Discount rate per gram
+ * @returns {Promise<number>} Discount percentage (decimal, e.g., 0.05 for 5%)
  */
 const determineDiscountRate = async (supplierId, totalGrams, karatType) => {
   const { pool } = require("../config/database");
@@ -199,5 +205,3 @@ module.exports = {
   aggregateReceiptData,
   aggregatePurchaseData,
 };
-
-
