@@ -1,4 +1,5 @@
 const { pool } = require("../config/database");
+const RecalculationService = require("../services/recalculationService");
 
 // ============================================================================
 // DISCOUNT TIERS CONTROLLER
@@ -366,6 +367,31 @@ const updateDiscountTier = async (req, res) => {
       updateValues
     );
 
+    // Trigger recalculation for all receipts of this supplier in the current month
+    // This ensures discounts are updated when discount tiers change
+    const supplierId = existingTier[0].supplier_id;
+    const currentMonth = RecalculationService.getCurrentMonth();
+    console.log(
+      `🔄 Triggering recalculation after discount tier update for supplier ${supplierId} in ${currentMonth}`
+    );
+
+    // Run recalculation in background (don't wait for it to complete)
+    RecalculationService.recalculateSupplierDiscounts(supplierId, currentMonth)
+      .then((result) => {
+        if (result.success) {
+          console.log(
+            `✅ Recalculation completed after discount tier update: ${result.message}`
+          );
+        } else {
+          console.error(
+            `❌ Recalculation failed after discount tier update: ${result.error}`
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("❌ Recalculation error after discount tier update:", error);
+      });
+
     res.json({
       success: true,
       message: "Discount tier updated successfully",
@@ -424,6 +450,31 @@ const deleteDiscountTier = async (req, res) => {
       "DELETE FROM discount_tiers WHERE id = ?",
       [id]
     );
+
+    // Trigger recalculation for all receipts of this supplier in the current month
+    // This ensures discounts are updated when discount tiers change
+    const supplierId = existingTier[0].supplier_id;
+    const currentMonth = RecalculationService.getCurrentMonth();
+    console.log(
+      `🔄 Triggering recalculation after discount tier deletion for supplier ${supplierId} in ${currentMonth}`
+    );
+
+    // Run recalculation in background (don't wait for it to complete)
+    RecalculationService.recalculateSupplierDiscounts(supplierId, currentMonth)
+      .then((result) => {
+        if (result.success) {
+          console.log(
+            `✅ Recalculation completed after discount tier deletion: ${result.message}`
+          );
+        } else {
+          console.error(
+            `❌ Recalculation failed after discount tier deletion: ${result.error}`
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("❌ Recalculation error after discount tier deletion:", error);
+      });
 
     res.json({
       success: true,

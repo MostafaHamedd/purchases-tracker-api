@@ -1,4 +1,5 @@
 const { pool } = require("../config/database");
+const RecalculationService = require("../services/recalculationService");
 
 // ============================================================================
 // PURCHASE SUPPLIERS CONTROLLER
@@ -584,6 +585,30 @@ const deletePurchaseSupplier = async (req, res) => {
       "DELETE FROM purchase_suppliers WHERE id = ?",
       [id]
     );
+
+    // Trigger recalculation for all receipts of this supplier in the current month
+    // This ensures discounts are updated when monthly totals change due to deletion
+    const currentMonth = RecalculationService.getCurrentMonth();
+    console.log(
+      `🔄 Triggering recalculation after purchase supplier deletion for supplier in ${currentMonth}`
+    );
+
+    // Run recalculation in background (don't wait for it to complete)
+    RecalculationService.recalculateMonthDiscounts(currentMonth)
+      .then((result) => {
+        if (result.success) {
+          console.log(
+            `✅ Recalculation completed after purchase supplier deletion: ${result.message}`
+          );
+        } else {
+          console.error(
+            `❌ Recalculation failed after purchase supplier deletion: ${result.error}`
+          );
+        }
+      })
+      .catch((error) => {
+        console.error("❌ Recalculation error after purchase supplier deletion:", error);
+      });
 
     res.json({
       success: true,
